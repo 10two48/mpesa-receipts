@@ -1,12 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
     <meta charset="UTF-8">
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>Transaction Dashboard</title>
 
     <style>
+
         body {
             font-family: Arial, sans-serif;
             background: #f4f6f8;
@@ -16,7 +20,7 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1250px;
             margin: auto;
         }
 
@@ -63,15 +67,60 @@
             overflow-x: auto;
         }
 
+        .filters {
+            margin-bottom: 20px;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .filters form {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .filters input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .filters button {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 5px;
+            background: #198754;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .filters button:hover {
+            background: #146c43;
+        }
+
+        .clear-btn {
+            padding: 10px 18px;
+            border-radius: 5px;
+            background: #6c757d;
+            color: white;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
         }
 
-        th, td {
+        th,
+        td {
             padding: 12px;
             border-bottom: 1px solid #eee;
             text-align: left;
+            white-space: nowrap;
         }
 
         th {
@@ -100,12 +149,33 @@
             background: #146c43;
         }
 
+        .no-results {
+            text-align: center;
+            padding: 30px;
+            color: #777;
+        }
+
         @media (max-width: 800px) {
+
             .cards {
                 grid-template-columns: 1fr;
             }
+
+            .filters form {
+                flex-direction: column;
+            }
+
+            .filters input,
+            .filters button,
+            .clear-btn {
+                width: 100%;
+                box-sizing: border-box;
+            }
+
         }
+
     </style>
+
 </head>
 
 <body>
@@ -113,46 +183,125 @@
 <div class="container">
 
     <h1>Transaction Dashboard</h1>
-    <p class="subtitle">M-Pesa payment transactions</p>
+
+    <p class="subtitle">
+        M-Pesa payment transactions
+    </p>
+
+
+    <!-- SUMMARY CARDS -->
 
     <div class="cards">
 
         <div class="card">
+
             <h3>Total Transactions</h3>
+
             <p>{{ total_transactions }}</p>
+
         </div>
 
+
         <div class="card">
+
             <h3>Successful Transactions</h3>
+
             <p>{{ successful_transactions }}</p>
+
         </div>
 
+
         <div class="card">
+
             <h3>Total Collections</h3>
-            <p>KES {{ "%.2f"|format(total_amount) }}</p>
+
+            <p>
+                KES {{ "%.2f"|format(total_amount) }}
+            </p>
+
         </div>
 
     </div>
+
+
+    <!-- TRANSACTION TABLE -->
 
     <div class="table-container">
 
         <h2>Transaction History</h2>
 
+
+        <!-- SEARCH AND DATE FILTER -->
+
+        <div class="filters">
+
+            <form method="GET" action="/dashboard">
+
+                <input
+                    type="text"
+                    name="search"
+                    placeholder="Search name, phone or M-Pesa receipt"
+                    value="{{ search }}"
+                >
+
+                <input
+                    type="date"
+                    name="date_from"
+                    value="{{ date_from }}"
+                >
+
+                <input
+                    type="date"
+                    name="date_to"
+                    value="{{ date_to }}"
+                >
+
+                <button type="submit">
+                    Search
+                </button>
+
+                <a
+                    href="/dashboard"
+                    class="clear-btn"
+                >
+                    Clear
+                </a>
+
+            </form>
+
+        </div>
+
+
+        <!-- TRANSACTIONS -->
+
         <table>
 
             <thead>
+
                 <tr>
+
                     <th>ID</th>
+
                     <th>Customer</th>
+
                     <th>Phone</th>
+
                     <th>Amount</th>
+
                     <th>Description</th>
+
                     <th>M-Pesa Receipt</th>
+
                     <th>Date</th>
+
                     <th>Status</th>
+
                     <th>Receipt</th>
+
                 </tr>
+
             </thead>
+
 
             <tbody>
 
@@ -160,39 +309,70 @@
 
                 <tr>
 
-                    <td>{{ transaction[0] }}</td>
-
-                    <td>{{ transaction[1] or "N/A" }}</td>
-
-                    <td>{{ transaction[2] or "N/A" }}</td>
-
-                    <td>KES {{ "%.2f"|format(transaction[3] or 0) }}</td>
-
-                    <td>{{ transaction[4] or "Payment" }}</td>
-
-                    <td>{{ transaction[7] or "N/A" }}</td>
-
-                    <td>{{ transaction[8] or "N/A" }}</td>
-
                     <td>
-                        {% if transaction[9] == "SUCCESS" %}
-                            <span class="success">SUCCESS</span>
-                        {% else %}
-                            <span class="failed">{{ transaction[9] }}</span>
-                        {% endif %}
+                        {{ transaction[0] }}
                     </td>
 
                     <td>
+                        {{ transaction[1] or "N/A" }}
+                    </td>
+
+                    <td>
+                        {{ transaction[2] or "N/A" }}
+                    </td>
+
+                    <td>
+                        KES {{ "%.2f"|format(transaction[3] or 0) }}
+                    </td>
+
+                    <td>
+                        {{ transaction[4] or "Payment" }}
+                    </td>
+
+                    <td>
+                        {{ transaction[7] or "N/A" }}
+                    </td>
+
+                    <td>
+                        {{ transaction[8] or "N/A" }}
+                    </td>
+
+                    <td>
+
                         {% if transaction[9] == "SUCCESS" %}
+
+                            <span class="success">
+                                SUCCESS
+                            </span>
+
+                        {% else %}
+
+                            <span class="failed">
+                                {{ transaction[9] }}
+                            </span>
+
+                        {% endif %}
+
+                    </td>
+
+                    <td>
+
+                        {% if transaction[9] == "SUCCESS" %}
+
                             <a
                                 class="receipt-btn"
                                 href="/receipt/{{ transaction[0] }}"
-                                target="_blank">
+                                target="_blank"
+                            >
                                 View
                             </a>
+
                         {% else %}
+
                             —
+
                         {% endif %}
+
                     </td>
 
                 </tr>
@@ -200,9 +380,14 @@
                 {% else %}
 
                 <tr>
-                    <td colspan="9" style="text-align:center;">
+
+                    <td
+                        colspan="9"
+                        class="no-results"
+                    >
                         No transactions found.
                     </td>
+
                 </tr>
 
                 {% endfor %}
@@ -216,4 +401,5 @@
 </div>
 
 </body>
+
 </html>
