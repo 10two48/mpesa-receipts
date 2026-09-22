@@ -437,6 +437,71 @@ def receipt(transaction_id):
         transaction=transaction
     )
 
+# =========================
+# TRANSACTION DASHBOARD
+# =========================
+
+@app.route("/dashboard")
+def dashboard():
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Get all transactions
+    cursor.execute("""
+        SELECT
+            id,
+            customer_name,
+            phone,
+            amount,
+            description,
+            checkout_request_id,
+            merchant_request_id,
+            mpesa_receipt_number,
+            transaction_date,
+            status
+        FROM transactions
+        ORDER BY id DESC
+    """)
+
+    transactions = cursor.fetchall()
+
+    # Total transactions
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM transactions
+    """)
+
+    total_transactions = cursor.fetchone()[0]
+
+    # Successful transactions
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM transactions
+        WHERE status = 'SUCCESS'
+    """)
+
+    successful_transactions = cursor.fetchone()[0]
+
+    # Total successful collections
+    cursor.execute("""
+        SELECT COALESCE(SUM(amount), 0)
+        FROM transactions
+        WHERE status = 'SUCCESS'
+    """)
+
+    total_amount = cursor.fetchone()[0]
+
+    cursor.close()
+    conn.close()
+
+    return render_template(
+        "dashboard.html",
+        transactions=transactions,
+        total_transactions=total_transactions,
+        successful_transactions=successful_transactions,
+        total_amount=total_amount
+    )
 
 # =========================
 # PAYMENT STATUS

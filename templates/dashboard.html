@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Transaction Dashboard</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            margin: 0;
+            padding: 30px;
+            color: #222;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 25px;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .card h3 {
+            margin: 0 0 10px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .card p {
+            margin: 0;
+            font-size: 26px;
+            font-weight: bold;
+        }
+
+        .table-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+        }
+
+        th {
+            background: #f8f9fa;
+        }
+
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+
+        .failed {
+            color: red;
+            font-weight: bold;
+        }
+
+        .receipt-btn {
+            background: #198754;
+            color: white;
+            padding: 7px 12px;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+
+        .receipt-btn:hover {
+            background: #146c43;
+        }
+
+        @media (max-width: 800px) {
+            .cards {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>Transaction Dashboard</h1>
+    <p class="subtitle">M-Pesa payment transactions</p>
+
+    <div class="cards">
+
+        <div class="card">
+            <h3>Total Transactions</h3>
+            <p>{{ total_transactions }}</p>
+        </div>
+
+        <div class="card">
+            <h3>Successful Transactions</h3>
+            <p>{{ successful_transactions }}</p>
+        </div>
+
+        <div class="card">
+            <h3>Total Collections</h3>
+            <p>KES {{ "%.2f"|format(total_amount) }}</p>
+        </div>
+
+    </div>
+
+    <div class="table-container">
+
+        <h2>Transaction History</h2>
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Customer</th>
+                    <th>Phone</th>
+                    <th>Amount</th>
+                    <th>Description</th>
+                    <th>M-Pesa Receipt</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th>Receipt</th>
+                </tr>
+            </thead>
+
+            <tbody>
+
+                {% for transaction in transactions %}
+
+                <tr>
+
+                    <td>{{ transaction[0] }}</td>
+
+                    <td>{{ transaction[1] or "N/A" }}</td>
+
+                    <td>{{ transaction[2] or "N/A" }}</td>
+
+                    <td>KES {{ "%.2f"|format(transaction[3] or 0) }}</td>
+
+                    <td>{{ transaction[4] or "Payment" }}</td>
+
+                    <td>{{ transaction[7] or "N/A" }}</td>
+
+                    <td>{{ transaction[8] or "N/A" }}</td>
+
+                    <td>
+                        {% if transaction[9] == "SUCCESS" %}
+                            <span class="success">SUCCESS</span>
+                        {% else %}
+                            <span class="failed">{{ transaction[9] }}</span>
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        {% if transaction[9] == "SUCCESS" %}
+                            <a
+                                class="receipt-btn"
+                                href="/receipt/{{ transaction[0] }}"
+                                target="_blank">
+                                View
+                            </a>
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+
+                </tr>
+
+                {% else %}
+
+                <tr>
+                    <td colspan="9" style="text-align:center;">
+                        No transactions found.
+                    </td>
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+</body>
+</html>
