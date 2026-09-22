@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>M-Pesa Receipt</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 30px 15px;
+            font-family: Arial, sans-serif;
+            background: #f4f7f6;
+            color: #222;
+        }
+
+        .receipt {
+            max-width: 500px;
+            margin: auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: #168f3c;
+            color: white;
+            text-align: center;
+            padding: 25px;
+        }
+
+        .header h1 {
+            margin: 0 0 8px;
+            font-size: 28px;
+        }
+
+        .header p {
+            margin: 0;
+            font-size: 14px;
+        }
+
+        .status {
+            text-align: center;
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .success {
+            display: inline-block;
+            background: #e8f7ed;
+            color: #176b31;
+            padding: 8px 18px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+
+        .details {
+            padding: 25px;
+        }
+
+        .row {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            padding: 13px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .label {
+            color: #666;
+        }
+
+        .value {
+            font-weight: bold;
+            text-align: right;
+            word-break: break-word;
+        }
+
+        .amount {
+            font-size: 24px;
+            color: #168f3c;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            background: #fafafa;
+            color: #777;
+            font-size: 13px;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 10px;
+            padding: 0 25px 25px;
+        }
+
+        .button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            text-align: center;
+            text-decoration: none;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        .print {
+            background: #168f3c;
+            color: white;
+        }
+
+        .home {
+            background: #eee;
+            color: #333;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+
+            .receipt {
+                box-shadow: none;
+                max-width: 100%;
+            }
+
+            .buttons {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="receipt">
+
+    <div class="header">
+        <h1>M-Pesa Receipt</h1>
+        <p>Payment Confirmation</p>
+    </div>
+
+    <div class="status">
+        <span class="success">
+            ✓ PAYMENT SUCCESSFUL
+        </span>
+    </div>
+
+    <div class="details">
+
+        <div class="row">
+            <span class="label">Customer Name</span>
+            <span class="value">
+                {{ transaction[1] or "N/A" }}
+            </span>
+        </div>
+
+        <div class="row">
+            <span class="label">Phone Number</span>
+            <span class="value">
+                {{ transaction[2] or "N/A" }}
+            </span>
+        </div>
+
+        <div class="row">
+            <span class="label">Amount</span>
+            <span class="value amount">
+                KSh {{ "%.2f"|format(transaction[3] or 0) }}
+            </span>
+        </div>
+
+        <div class="row">
+            <span class="label">Description</span>
+            <span class="value">
+                {{ transaction[4] or "Payment" }}
+            </span>
+        </div>
+
+        <div class="row">
+            <span class="label">M-Pesa Receipt</span>
+            <span class="value">
+                {{ transaction[7] or "N/A" }}
+            </span>
+        </div>
+
+        <div class="row">
+            <span class="label">Transaction Date</span>
+            <span class="value">
+                {{ transaction[8] or "N/A" }}
+            </span>
+        </div>
+
+        <div class="row">
+            <span class="label">Status</span>
+            <span class="value">
+                {{ transaction[9] }}
+            </span>
+        </div>
+
+    </div>
+
+    <div class="buttons">
+
+        <button
+            class="button print"
+            onclick="window.print()">
+            Print Receipt
+        </button>
+
+        <a
+            href="/"
+            class="button home">
+            New Payment
+        </a>
+
+    </div>
+
+    <div class="footer">
+        Thank you for your payment.
+    </div>
+
+</div>
+
+</body>
+</html>
