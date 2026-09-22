@@ -4,24 +4,38 @@ import base64
 from datetime import datetime
 import requests
 from dotenv import load_dotenv
-import sqlite3
+import psycopg2
 
 load_dotenv()
 
 app = Flask(__name__)
 
+
+# =========================
+# DATABASE CONNECTION
+# =========================
+
+def get_db_connection():
+    database_url = os.getenv("DATABASE_URL")
+
+    if not database_url:
+        raise Exception("DATABASE_URL is not configured.")
+
+    return psycopg2.connect(database_url)
+
+
 def init_db():
-    conn = sqlite3.connect("database.db")
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS transactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             customer_name TEXT,
             phone TEXT,
-            amount REAL,
+            amount NUMERIC,
             description TEXT,
-            checkout_request_id TEXT,
+            checkout_request_id TEXT UNIQUE,
             merchant_request_id TEXT,
             mpesa_receipt_number TEXT,
             transaction_date TEXT,
@@ -34,23 +48,34 @@ def init_db():
             checkout_request_id TEXT PRIMARY KEY,
             customer_name TEXT,
             phone TEXT,
-            amount REAL,
+            amount NUMERIC,
             description TEXT
         )
     """)
 
     conn.commit()
+    cursor.close()
     conn.close()
 
+
+# =========================
+# MPESA ACCESS TOKEN
+# =========================
+
 def get_access_token():
-    url = "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
+
+    url = (
+        "https://sandbox.safaricom.co.ke/"
+        "oauth/v1/generate?grant_type=client_credentials"
+    )
 
     response = requests.get(
         url,
         auth=(
             os.getenv("CONSUMER_KEY"),
             os.getenv("CONSUMER_SECRET")
-        )
+        ),
+        timeout=30
     )
 
     response.raise_for_status()
@@ -58,14 +83,23 @@ def get_access_token():
     return response.json()["access_token"]
 
 
+# =========================
+# HOME PAGE
+# =========================
+
 @app.route("/")
 def home():
     return render_template("index.html")
 
 
+# =========================
+# INITIATE PAYMENT
+# =========================
+
 @app.route("/pay", methods=["POST"])
 def pay():
-    data = request.get_json()
+
+    data = request.get_json() or {}
 
     phone = data.get("phone")
     amount = data.get("amount")
@@ -77,44 +111,65 @@ def pay():
             "message": "Phone number and amount are required."
         }), 400
 
+    # Clean phone number
     phone = phone.replace(" ", "").replace("+", "")
 
     if phone.startswith("0"):
         phone = "254" + phone[1:]
 
-    if not phone.startswith("254"):
+    if not phone.startswith("254") or len(phone) != 12:
         return jsonify({
             "success": False,
             "message": "Enter a valid Kenyan phone number."
         }), 400
 
+    # Convert amount to integer
     try:
         amount = int(float(amount))
-    except ValueError:
+
+        if amount <= 0:
+            raise ValueError
+
+    except (ValueError, TypeError):
         return jsonify({
             "success": False,
             "message": "Enter a valid amount."
         }), 400
 
     try:
+
         access_token = get_access_token()
 
         shortcode = os.getenv("MPESA_SHORTCODE")
         passkey = os.getenv("MPESA_PASSKEY")
 
+        if not shortcode or not passkey:
+            raise Exception("M-Pesa credentials are not configured.")
+
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
         password_string = shortcode + passkey + timestamp
+
         password = base64.b64encode(
             password_string.encode()
         ).decode()
 
-        stk_url = "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest"
+        stk_url = (
+            "https://sandbox.safaricom.co.ke/"
+            "mpesa/stkpush/v1/processrequest"
+        )
 
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json"
         }
+
+        # Temporary callback URL.
+        # We will change this to your Render URL after deployment.
+        callback_url = os.getenv(
+            "CALLBACK_URL",
+            "https://foothill-profound-winter.ngrok-free.dev/callback"
+        )
 
         payload = {
             "BusinessShortCode": shortcode,
@@ -125,7 +180,7 @@ def pay():
             "PartyA": phone,
             "PartyB": shortcode,
             "PhoneNumber": phone,
-            "CallBackURL": "https://foothill-profound-winter.ngrok-free.dev/callback",
+            "CallBackURL": callback_url,
             "AccountReference": "PAYMENT",
             "TransactionDesc": description or "Payment"
         }
@@ -133,26 +188,37 @@ def pay():
         response = requests.post(
             stk_url,
             json=payload,
-            headers=headers
+            headers=headers,
+            timeout=30
         )
 
         result = response.json()
 
+        # Save pending payment
         if result.get("ResponseCode") == "0":
-            checkout_request_id = result.get("CheckoutRequestID")
 
-            conn = sqlite3.connect("database.db")
+            checkout_request_id = result.get(
+                "CheckoutRequestID"
+            )
+
+            conn = get_db_connection()
             cursor = conn.cursor()
 
             cursor.execute("""
-                INSERT OR REPLACE INTO pending_payments (
+                INSERT INTO pending_payments (
                     checkout_request_id,
                     customer_name,
                     phone,
                     amount,
                     description
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (checkout_request_id)
+                DO UPDATE SET
+                    customer_name = EXCLUDED.customer_name,
+                    phone = EXCLUDED.phone,
+                    amount = EXCLUDED.amount,
+                    description = EXCLUDED.description
             """, (
                 checkout_request_id,
                 data.get("customer_name"),
@@ -162,17 +228,25 @@ def pay():
             ))
 
             conn.commit()
+            cursor.close()
             conn.close()
 
         return jsonify(result), response.status_code
 
     except Exception as e:
+
+        print("Payment error:", str(e))
+
         return jsonify({
             "success": False,
             "message": "Payment request failed.",
             "error": str(e)
         }), 500
 
+
+# =========================
+# MPESA CALLBACK
+# =========================
 
 @app.route("/callback", methods=["GET", "POST"])
 def callback():
@@ -191,18 +265,27 @@ def callback():
             "ResultDesc": "No callback data received"
         })
 
-    stk_callback = data.get("Body", {}).get("stkCallback", {})
+    stk_callback = data.get(
+        "Body", {}
+    ).get(
+        "stkCallback", {}
+    )
 
     result_code = stk_callback.get("ResultCode")
     result_desc = stk_callback.get("ResultDesc")
 
-    checkout_request_id = stk_callback.get("CheckoutRequestID")
-    merchant_request_id = stk_callback.get("MerchantRequestID")
+    checkout_request_id = stk_callback.get(
+        "CheckoutRequestID"
+    )
 
-    # Find the original payment details
-    conn = sqlite3.connect("database.db")
+    merchant_request_id = stk_callback.get(
+        "MerchantRequestID"
+    )
+
+    conn = get_db_connection()
     cursor = conn.cursor()
 
+    # Find original payment
     cursor.execute("""
         SELECT
             customer_name,
@@ -210,19 +293,26 @@ def callback():
             amount,
             description
         FROM pending_payments
-        WHERE checkout_request_id = ?
+        WHERE checkout_request_id = %s
     """, (checkout_request_id,))
 
     pending_payment = cursor.fetchone()
 
-    # Extract M-Pesa callback information
+    # Callback information
     mpesa_receipt_number = None
     transaction_date = None
     callback_phone = None
     callback_amount = None
 
-    callback_metadata = stk_callback.get("CallbackMetadata", {})
-    items = callback_metadata.get("Item", [])
+    callback_metadata = stk_callback.get(
+        "CallbackMetadata",
+        {}
+    )
+
+    items = callback_metadata.get(
+        "Item",
+        []
+    )
 
     for item in items:
 
@@ -241,9 +331,13 @@ def callback():
         elif name == "Amount":
             callback_amount = value
 
-    status = "SUCCESS" if result_code == 0 else "FAILED"
+    status = (
+        "SUCCESS"
+        if result_code == 0
+        else "FAILED"
+    )
 
-    # Use original payment information when available
+    # Use original payment information
     if pending_payment:
 
         customer_name = pending_payment[0]
@@ -258,7 +352,7 @@ def callback():
         amount = callback_amount
         description = result_desc
 
-    # Save completed transaction
+    # Save transaction
     cursor.execute("""
         INSERT INTO transactions (
             customer_name,
@@ -271,7 +365,11 @@ def callback():
             transaction_date,
             status
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s
+        )
+        ON CONFLICT (checkout_request_id)
+        DO NOTHING
     """, (
         customer_name,
         phone,
@@ -284,23 +382,30 @@ def callback():
         status
     ))
 
-    # Remove the payment from pending payments
+    # Remove pending payment
     cursor.execute("""
         DELETE FROM pending_payments
-        WHERE checkout_request_id = ?
+        WHERE checkout_request_id = %s
     """, (checkout_request_id,))
 
     conn.commit()
+    cursor.close()
     conn.close()
 
     return jsonify({
         "ResultCode": 0,
         "ResultDesc": "Callback received successfully"
     })
+
+
+# =========================
+# RECEIPT
+# =========================
+
 @app.route("/receipt/<int:transaction_id>")
 def receipt(transaction_id):
 
-    conn = sqlite3.connect("database.db")
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -316,11 +421,12 @@ def receipt(transaction_id):
             transaction_date,
             status
         FROM transactions
-        WHERE id = ?
+        WHERE id = %s
     """, (transaction_id,))
 
     transaction = cursor.fetchone()
 
+    cursor.close()
     conn.close()
 
     if not transaction:
@@ -330,23 +436,31 @@ def receipt(transaction_id):
         "receipt.html",
         transaction=transaction
     )
+
+
+# =========================
+# PAYMENT STATUS
+# =========================
+
 @app.route("/payment-status/<checkout_request_id>")
 def payment_status(checkout_request_id):
 
-    conn = sqlite3.connect("database.db")
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
         SELECT id, status
         FROM transactions
-        WHERE checkout_request_id = ?
+        WHERE checkout_request_id = %s
     """, (checkout_request_id,))
 
     transaction = cursor.fetchone()
 
+    cursor.close()
     conn.close()
 
     if transaction:
+
         return jsonify({
             "found": True,
             "transaction_id": transaction[0],
@@ -357,34 +471,51 @@ def payment_status(checkout_request_id):
         "found": False,
         "status": "PENDING"
     })
-@app.route("/history")
-def history():
 
-    conn = sqlite3.connect("database.db")
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT
-            id,
-            customer_name,
-            phone,
-            amount,
-            description,
-            mpesa_receipt_number,
-            transaction_date,
-            status
-        FROM transactions
-        ORDER BY id DESC
-    """)
+# =========================
+# HEALTH CHECK
+# =========================
 
-    transactions = cursor.fetchall()
+@app.route("/health")
+def health():
 
-    conn.close()
+    try:
 
-    return render_template(
-        "history.html",
-        transactions=transactions
-    )
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT 1")
+
+        cursor.fetchone()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "status": "ok",
+            "database": "connected"
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "status": "error",
+            "database": "not connected",
+            "error": str(e)
+        }), 500
+
+
+# =========================
+# START APPLICATION
+# =========================
+
 if __name__ == "__main__":
+
     init_db()
-    app.run(debug=True)
+
+    app.run(
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 5000)),
+        debug=True
+    )
